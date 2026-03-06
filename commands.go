@@ -25,6 +25,51 @@ type commands struct {
 	handlers map[string]func(*state, command) error
 }
 
+func handlerFeeds(s *state, _ command) error {
+	feeds, err := s.db.GetAllFeeds(context.Background())
+	if err != nil {
+		return fmt.Errorf("Error: failed to get feeds: %w", err)
+	}
+	for _, feed := range feeds {
+		userId := feed.UserID.UUID
+		creator, err := s.db.GetUserById(context.Background(), userId)
+		if err != nil {
+			return fmt.Errorf("Error: could not find user with id %v: %w", userId, err)
+		}
+		fmt.Printf("- name: %s, \n  URL: %s, \n  Created by: %s\n", feed.Name.String, feed.Url.String, creator.Name.String)
+	}
+	return nil
+
+}
+
+func handlerAddFeed(s *state, cmd command) error {
+
+	if len(cmd.arguments) < 2 {
+		return fmt.Errorf("Error: Not enough arguments")
+	}
+	name := sql.NullString{String: cmd.arguments[0], Valid: true}
+	url := sql.NullString{String: cmd.arguments[1], Valid: true}
+	user, err := s.db.GetUser(context.Background(), sql.NullString{String: s.cfg.Username, Valid: true})
+	if err != nil {
+		return fmt.Errorf("Error, could not find user")
+	}
+
+	userUUid := uuid.NullUUID{UUID: user.ID, Valid: true}
+	//create user parameters
+	currentTime := sql.NullTime{Time: time.Now()}
+
+	feedParams := database.CreateFeedParams{ID: uuid.New(), CreatedAt: currentTime, UpdatedAt: currentTime, Name: name, Url: url, UserID: userUUid}
+
+	feed, err := s.db.CreateFeed(context.Background(), feedParams)
+	if err != nil {
+		return fmt.Errorf("Error creating user %w", err)
+	}
+
+	fmt.Printf("Created Feed:\nname: %s\nurl: %s", feed.Name.String, feed.Url.String)
+	return nil
+
+}
+
 func handlerAgg(_ *state, _ command) error {
 	urlFeed := "https://www.wagslane.dev/index.xml"
 	rssFeed, err := fetchFeed(context.Background(), urlFeed)
